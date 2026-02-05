@@ -1,0 +1,24 @@
+image:
+  repository: graph-service
+  tag: latest
+
+replicas: 2
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+service:
+  type: ClusterIP
+  port: 8000
+
+neo4j:
+  enabled: true
+  uri: "bolt://neo4j:7687"
+
+kafka:
+  bootstrap: "kafka:9092"

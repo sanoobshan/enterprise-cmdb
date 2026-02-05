@@ -1,0 +1,42 @@
+apiVersion: policy/v1
+kind: NetworkPolicy
+metadata:
+  name: cmdb-network-policy
+  namespace: cmdb
+spec:
+  podSelector:
+    matchLabels:
+      app: cmdb
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: cmdb
+    - podSelector:
+        matchLabels:
+          role: frontend
+    ports:
+    - protocol: TCP
+      port: 8000
+    - protocol: TCP
+      port: 8001
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: cmdb
+    ports:
+    - protocol: TCP
+      port: 7687  # Neo4j
+    - protocol: TCP
+      port: 9092  # Kafka
+    - protocol: TCP
+      port: 5432  # Postgres
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 53    # DNS

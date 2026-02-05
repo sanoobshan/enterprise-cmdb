@@ -1,0 +1,81 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cmdb-platform
+  namespace: argocd
+spec:
+  project: default
+  
+  source:
+    repoURL: https://github.com/yourrepo/enterprise-cmdb
+    targetRevision: main
+    path: helm
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cmdb
+  
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+  
+  notifications:
+    - type: slack
+      enabled: true
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cmdb-kafka
+  namespace: argocd
+spec:
+  project: default
+  
+  source:
+    repoURL: https://charts.bitnami.com/bitnami
+    chart: kafka
+    targetRevision: 25.0.0
+    helm:
+      values: |
+        replicas: 3
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cmdb
+  
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cmdb-neo4j
+  namespace: argocd
+spec:
+  project: default
+  
+  source:
+    repoURL: https://neo4j.github.io/helm-charts
+    chart: neo4j
+    targetRevision: 5.0.0
+    helm:
+      values: |
+        neo4j:
+          edition: community
+          password: password
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cmdb
+  
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

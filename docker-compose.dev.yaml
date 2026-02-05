@@ -1,0 +1,178 @@
+version: "3.9"
+
+services:
+
+  zookeeper:
+    image: bitnami/zookeeper:latest
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    ports:
+      - "2181:2181"
+    networks:
+      - cmdb-network
+
+  kafka:
+    image: bitnami/kafka:latest
+    depends_on:
+      - zookeeper
+    environment:
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      - ALLOW_PLAINTEXT_LISTENER=yes
+    ports:
+      - "9092:9092"
+    networks:
+      - cmdb-network
+
+  neo4j:
+    image: neo4j:5-community
+    environment:
+      - NEO4J_AUTH=neo4j/password
+      - NEO4J_PLUGINS=["apoc"]
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j_data:/var/lib/neo4j/data
+    networks:
+      - cmdb-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7474"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=cmdb
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=cmdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - cmdb-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cmdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  octelium:
+    image: ghcr.io/octelium/octelium:latest
+    environment:
+      - OCTELIUM_MODE=standalone
+      - OCTELIUM_LOG_LEVEL=info
+    ports:
+      - "8443:8443"
+      - "9000:9000"
+    volumes:
+      - octelium_data:/var/lib/octelium
+    networks:
+      - cmdb-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-k", "https://localhost:8443/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  audit-logger:
+    build:
+      context: ./services/audit-logger
+      dockerfile: Dockerfile
+    depends_on:
+      - postgres
+      - octelium
+    environment:
+      - DATABASE_URL=postgresql://cmdb:password@postgres:5432/cmdb
+      - OCTELIUM_ENDPOINT=https://octelium:8443
+      - LOG_LEVEL=INFO
+    ports:
+      - "8002:8002"
+    networks:
+      - cmdb-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  graph-service:
+    build:
+      context: ./services/graph-service
+      dockerfile: Dockerfile
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    environment:
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASS=password
+      - LOG_LEVEL=INFO
+    ports:
+      - "8000:8000"
+    networks:
+      - cmdb-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  event-ingestor:
+    build:
+      context: ./services/event-ingestor
+      dockerfile: Dockerfile
+    depends_on:
+      - kafka
+      - graph-service
+    environment:
+      - KAFKA_BOOTSTRAP=kafka:9092
+      - GRAPH_SERVICE_URL=http://graph-service:8000
+      - LOG_LEVEL=INFO
+    networks:
+      - cmdb-network
+
+  drift-engine:
+    build:
+      context: ./services/drift-engine
+      dockerfile: Dockerfile
+    depends_on:
+      - kafka
+      - graph-service
+    environment:
+      - KAFKA_BOOTSTRAP=kafka:9092
+      - GRAPH_SERVICE_URL=http://graph-service:8000
+      - LOG_LEVEL=INFO
+    networks:
+      - cmdb-network
+
+  impact-engine:
+    build:
+      context: ./services/impact-engine
+      dockerfile: Dockerfile
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    environment:
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASS=password
+      - LOG_LEVEL=INFO
+    ports:
+      - "8001:8001"
+    networks:
+      - cmdb-network
+
+volumes:
+  neo4j_data:
+  postgres_data:
+  octelium_data:
+
+networks:
+  cmdb-network:
+    driver: bridge

@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opa-policy
+data:
+  security.rego: |
+    package cmdb
+    
+    # Deny public databases
+    deny[msg] {
+        input.type == "database"
+        input.public == true
+        msg := "Public database not allowed"
+    }
+    
+    # Deny non-encrypted storage
+    deny[msg] {
+        input.type == "storage"
+        input.encrypted == false
+        msg := "Storage must be encrypted"
+    }

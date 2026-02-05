@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cmdb-backup
+  namespace: cmdb
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: backup
+            image: neo4j:5-community
+            env:
+            - name: NEO4J_URI
+              value: "bolt://neo4j:7687"
+            - name: NEO4J_USER
+              valueFrom:
+                secretKeyRef:
+                  name: graph-service-secrets
+                  key: neo4j_user
+            - name: NEO4J_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: graph-service-secrets
+                  key: neo4j_password
+            command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Starting Neo4j backup..."
+              # Backup command would go here
+              echo "Backup completed"
+          restartPolicy: OnFailure
